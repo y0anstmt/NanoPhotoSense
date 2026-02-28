@@ -108,3 +108,65 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
     version: str = "0.1.0"
+
+
+class SpectrumStreamData(BaseModel):
+    """Spectrum data for streaming (SSE)"""
+
+    sensor_id: str = Field(..., description="Sensor identifier")
+    timestamp: int = Field(..., description="Unix timestamp (seconds)")
+    peak_wavelength: float = Field(..., description="Peak wavelength (nm)")
+    wavelengths: List[float] = Field(..., description="Wavelength array (nm)")
+    intensities: List[float] = Field(..., description="Intensity array")
+    refractive_index: float = Field(..., description="Current refractive index")
+    delta_n: float = Field(..., description="Refractive index change (Δn)")
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "sensor_id": "LSPR-01",
+            "timestamp": 1700000000,
+            "peak_wavelength": 645.2,
+            "wavelengths": [400.0, 401.0, 402.0],
+            "intensities": [0.01, 0.02, 0.03],
+            "refractive_index": 1.333,
+            "delta_n": 0.002
+        }
+    })
+
+
+class BatchSpectrumResponse(BaseModel):
+    """Response containing batch of spectra"""
+
+    spectra: List[SpectrumStreamData] = Field(..., description="Array of spectral data")
+    count: int = Field(..., description="Number of spectra")
+    generated_at: int = Field(..., description="Generation timestamp (Unix)")
+
+
+class InfiltrationConfig(BaseModel):
+    """Configuration for infiltration profile"""
+
+    profile_type: str = Field(..., description="Profile type: 'slow', 'fast', or 'none'")
+    max_delta_n: float = Field(default=0.01, ge=0.0, le=0.5, description="Maximum Δn")
+    time_param: float = Field(default=60.0, ge=1.0, description="Time parameter (T for slow, tau for fast)")
+    noise_level: float = Field(default=0.02, ge=0.0, le=0.5, description="Gaussian noise σ")
+    base_peak: float = Field(default=520.0, ge=400.0, le=800.0, description="Base peak wavelength (nm)")
+    sensitivity_k: float = Field(default=200.0, ge=50.0, le=500.0, description="LSPR sensitivity (nm/RIU)")
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "profile_type": "fast",
+            "max_delta_n": 0.012,
+            "time_param": 90.0,
+            "noise_level": 0.03,
+            "base_peak": 520.0,
+            "sensitivity_k": 200.0
+        }
+    })
+
+
+class ConfigureResponse(BaseModel):
+    """Response for configuration update"""
+
+    status: str = Field(..., description="Status message")
+    config: InfiltrationConfig = Field(..., description="Updated configuration")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Update timestamp")
