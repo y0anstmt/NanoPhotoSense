@@ -131,3 +131,246 @@ class LSPRSimulator:
         normalized = abs(delta_n) / threshold
         risk = 100 * (1 - 1 / (1 + normalized**2))
         return min(risk, 100.0)
+
+
+# Standalone LSPR modeling functions
+
+def compute_lspr_spectrum(
+    wavelengths: np.ndarray,
+    peak_center: float,
+    peak_width: float,
+    amplitude: float
+) -> np.ndarray:
+    """
+    Generate a Gaussian LSPR spectrum.
+    
+    Uses the formula: I(λ) = A · exp(-(λ - λ₀)² / (2σ²))
+    
+    Args:
+        wavelengths: Array of wavelength values (nm)
+        peak_center: Peak center wavelength λ₀ (nm)
+        peak_width: Peak width σ (nm)
+        amplitude: Peak amplitude A
+    
+    Returns:
+        Array of intensity values corresponding to input wavelengths
+    """
+    # Gaussian profile: I(λ) = A · exp(-(λ - λ₀)² / (2σ²))
+    exponent = -((wavelengths - peak_center) ** 2) / (2 * peak_width ** 2)
+    intensities = amplitude * np.exp(exponent)
+    return intensities
+
+
+def apply_refractive_index_shift(
+    base_peak: float,
+    delta_n: float,
+    sensitivity_k: float = 200.0
+) -> float:
+    """
+    Calculate LSPR peak wavelength shift due to refractive index change.
+    
+    Uses the formula: Δλ = k · Δn
+    where k ≈ 200 nm/RIU (typical for Au nanoparticles)
+    
+    Args:
+        base_peak: Base peak wavelength (nm)
+        delta_n: Change in refractive index (Δn)
+        sensitivity_k: Sensitivity factor k (nm/RIU), default 200 nm/RIU for Au
+    
+    Returns:
+        Shifted peak wavelength (nm)
+    """
+    # Calculate wavelength shift: Δλ = k · Δn
+    delta_lambda = sensitivity_k * delta_n
+    
+    # Return new peak position
+    shifted_peak = base_peak + delta_lambda
+    return shifted_peak
+
+
+def generate_temporal_series(
+    duration_s: float,
+    interval_ms: float,
+    infiltration_profile,
+    base_peak: float = 520.0,
+    peak_width: float = 40.0,
+    amplitude: float = 1.0,
+    sensitivity_k: float = 200.0,
+    wavelengths: Optional[np.ndarray] = None
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Generate temporal series of LSPR spectra simulating water infiltration.
+    
+    Models time-dependent refractive index changes Δn(t) that simulate
+    progressive water infiltration into a sensing medium.
+    
+    Args:
+        duration_s: Total duration of simulation (seconds)
+        interval_ms: Time interval between measurements (milliseconds)
+        infiltration_profile: Function or array defining Δn(t) evolution
+                            - If callable: function(t) -> delta_n
+                            - If array-like: array of delta_n values
+        base_peak: Base peak wavelength (nm), default 520 nm
+        peak_width: Gaussian peak width σ (nm), default 40 nm
+        amplitude: Peak amplitude, default 1.0
+        sensitivity_k: LSPR sensitivity (nm/RIU), default 200 nm/RIU
+        wavelengths: Wavelength array (nm), defaults to 400-700 nm
+    
+    Returns:
+        Tuple of:
+        - time_points: Array of time points (seconds)
+        - spectra: 2D array of spectra (time × wavelength)
+        - peak_positions: Array of peak wavelengths at each time point (nm)
+    """
+    # Setup wavelength range
+    if wavelengths is None:
+        wavelengths = np.linspace(400, 700, 300)
+    
+    # Calculate time points
+    interval_s = interval_ms / 1000.0
+    num_points = int(duration_s / interval_s) + 1
+    time_points = np.linspace(0, duration_s, num_points)
+    
+    # Initialize output arrays
+    spectra = np.zeros((num_points, len(wavelengths)))
+    peak_positions = np.zeros(num_points)
+    
+    # Generate infiltration profile if needed
+    if callable(infiltration_profile):
+        # Function provided: evaluate at each time point
+        delta_n_values = np.array([infiltration_profile(t) for t in time_points])
+    else:
+        # Array provided: interpolate if necessary
+        delta_n_array = np.array(infiltration_profile)
+        if len(delta_n_array) == num_points:
+            delta_n_values = delta_n_array
+        else:
+            # Interpolate to match time points
+            original_times = np.linspace(0, duration_s, len(delta_n_array))
+            delta_n_values = np.interp(time_points, original_times, delta_n_array)
+    
+    # Generate spectrum at each time point
+    for i, (t, delta_n) in enumerate(zip(time_points, delta_n_values)):
+        # Calculate shifted peak position
+        current_peak = apply_refractive_index_shift(base_peak, delta_n, sensitivity_k)
+        peak_positions[i] = current_peak
+        
+        # Generate spectrum
+        spectra[i, :] = compute_lspr_spectrum(
+            wavelengths,
+            current_peak,
+            peak_width,
+            amplitude
+        )
+    
+    return time_points, spectra, peak_positions
+
+
+# Infiltration profile functions
+
+def slow_infiltration_profile(t: float, T: float = 3600.0, max_delta_n: float = 0.001) -> float:
+    """
+    Slow linear infiltration profile.
+    
+    Models gradual water infiltration over hours with linear progression:
+    Δn(t) = max_delta_n · (t / T)
+    
+    Args:
+        t: Current time (seconds)
+        T: Total duration for full infiltration (seconds), default 3600s (1 hour)
+        max_delta_n: Maximum refractive index change, default 0.001
+    
+    Returns:
+        Refractive index change at time t
+    """
+    delta_n = max_delta_n * (t / T)
+    return min(delta_n, max_delta_n)  # Cap at max_delta_n
+
+
+def fast_infiltration_profile(t: float, tau: float = 60.0, max_delta_n: float = 0.01) -> float:
+    """
+    Fast exponential infiltration profile.
+    
+    Models rapid water infiltration over minutes with exponential saturation:
+    Δn(t) = max_delta_n · (1 - e^(-t/τ))
+    
+    Args:
+        t: Current time (seconds)
+        tau: Time constant τ (seconds), default 60s (1 minute)
+        max_delta_n: Maximum refractive index change, default 0.01
+    
+    Returns:
+        Refractive index change at time t
+    """
+    delta_n = max_delta_n * (1.0 - np.exp(-t / tau))
+    return delta_n
+
+
+def add_gaussian_noise(
+    spectra: np.ndarray,
+    sigma_noise: float = 0.01,
+    seed: Optional[int] = None
+) -> np.ndarray:
+    """
+    Add Gaussian noise to spectral data.
+    
+    Adds independent Gaussian noise N(0, σ_noise) to each spectrum point:
+    I_noisy(λ) = I(λ) + N(0, σ_noise)
+    
+    Args:
+        spectra: Spectral data array (can be 1D or 2D)
+                - 1D: single spectrum (wavelength,)
+                - 2D: time series (time, wavelength)
+        sigma_noise: Standard deviation of Gaussian noise
+        seed: Random seed for reproducibility (optional)
+    
+    Returns:
+        Noisy spectral data with same shape as input
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # Generate Gaussian noise with same shape as input
+    noise = np.random.normal(0, sigma_noise, spectra.shape)
+    
+    # Add noise to spectra
+    noisy_spectra = spectra + noise
+    
+    # Clip negative values (intensities should be non-negative)
+    noisy_spectra = np.clip(noisy_spectra, 0, None)
+    
+    return noisy_spectra
+
+
+def create_infiltration_profile(
+    profile_type: str = "slow",
+    **kwargs
+):
+    """
+    Factory function to create infiltration profile functions.
+    
+    Args:
+        profile_type: Type of infiltration profile ("slow" or "fast")
+        **kwargs: Parameters for the specific profile type
+                  - slow: T (duration), max_delta_n
+                  - fast: tau (time constant), max_delta_n
+    
+    Returns:
+        Callable infiltration profile function that takes time t and returns delta_n
+    
+    Examples:
+        >>> slow_profile = create_infiltration_profile("slow", T=7200, max_delta_n=0.002)
+        >>> fast_profile = create_infiltration_profile("fast", tau=120, max_delta_n=0.015)
+    """
+    if profile_type.lower() == "slow":
+        T = kwargs.get("T", 3600.0)
+        max_delta_n = kwargs.get("max_delta_n", 0.001)
+        return lambda t: slow_infiltration_profile(t, T, max_delta_n)
+    
+    elif profile_type.lower() == "fast":
+        tau = kwargs.get("tau", 60.0)
+        max_delta_n = kwargs.get("max_delta_n", 0.01)
+        return lambda t: fast_infiltration_profile(t, tau, max_delta_n)
+    
+    else:
+        raise ValueError(f"Unknown profile type: {profile_type}. Use 'slow' or 'fast'.")
