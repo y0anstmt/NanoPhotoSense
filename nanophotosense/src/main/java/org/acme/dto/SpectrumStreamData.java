@@ -15,8 +15,8 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SpectrumStreamData {
-    @NotBlank(message = "Name is mandatory")
-    private String name;
+    @NotBlank(message = "sensorId is mandatory")
+    private String sensorId;
 
     @NotNull(message = "timestamp is mandatory")
     private Instant timestamp;
