@@ -145,7 +145,7 @@ class BatchSpectrumResponse(BaseModel):
 class InfiltrationConfig(BaseModel):
     """Configuration for infiltration profile"""
 
-    profile_type: str = Field(..., description="Profile type: 'slow', 'fast', or 'none'")
+    profile_type: str = Field(..., description="Profile type: 'slow', 'fast', 'landslide', or 'none'")
     max_delta_n: float = Field(default=0.01, ge=0.0, le=0.5, description="Maximum Δn")
     time_param: float = Field(default=60.0, ge=1.0, description="Time parameter (T for slow, tau for fast)")
     noise_level: float = Field(default=0.02, ge=0.0, le=0.5, description="Gaussian noise σ")
@@ -154,9 +154,9 @@ class InfiltrationConfig(BaseModel):
 
     model_config = ConfigDict(json_schema_extra={
         "example": {
-            "profile_type": "fast",
-            "max_delta_n": 0.012,
-            "time_param": 90.0,
+            "profile_type": "landslide",
+            "max_delta_n": 0.02,
+            "time_param": 1200.0,
             "noise_level": 0.03,
             "base_peak": 520.0,
             "sensitivity_k": 200.0

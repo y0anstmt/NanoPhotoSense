@@ -168,7 +168,7 @@ Changes the active infiltration profile for streaming and batch endpoints.
 ```
 
 **Parameters:**
-- `profile_type` (required): "slow", "fast", or "none"
+- `profile_type` (required): "slow", "fast", "landslide", or "none"
 - `max_delta_n` (optional): Maximum refractive index change (default: 0.01)
 - `time_param` (optional): Time parameter - T for slow (seconds), τ for fast (seconds) (default: 60.0)
 - `noise_level` (optional): Gaussian noise σ (default: 0.02)
@@ -399,6 +399,11 @@ interface SpectrumStreamData {
 - **Formula:** Δn(t) = max_delta_n × (1 - e^(-t/τ))
 - **Use:** Rapid contamination over minutes
 - **time_param:** Time constant τ in seconds
+
+### Landslide Soil-Moisture Infiltration
+- **Formula:** Exponential soil saturation plus rainfall pulse transient
+- **Use:** Landslide early warning from increasing moisture infiltration
+- **time_param:** Characteristic saturation timescale in seconds
 
 ### None
 - **Formula:** Δn(t) = 0

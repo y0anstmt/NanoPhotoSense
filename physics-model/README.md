@@ -110,9 +110,9 @@ Change infiltration profile at runtime:
 ```bash
 POST /spectrum/configure
 {
-  "profile_type": "fast",
-  "max_delta_n": 0.012,
-  "time_param": 90.0,
+  "profile_type": "landslide",
+  "max_delta_n": 0.02,
+  "time_param": 1200.0,
   "noise_level": 0.03
 }
 ```
@@ -183,7 +183,12 @@ The simulator includes predefined infiltration profiles for modeling water conta
 - Time constant: Minutes (τ ≈ 60s)
 - Use case: Acute contamination events
 
-#### 3. **Gaussian Noise**
+#### 3. **Landslide Soil-Moisture Infiltration**
+- Formula: Exponential soil saturation with a rainfall pulse transient
+- Time constant: Tens of minutes to hours (depends on soil permeability)
+- Use case: Hillslope instability and landslide early warning
+
+#### 4. **Gaussian Noise**
 - Formula: $I(\lambda) = I(\lambda) + \mathcal{N}(0, \sigma_{noise})$
 - Models measurement uncertainty
 - Typical σ: 0.01-0.05

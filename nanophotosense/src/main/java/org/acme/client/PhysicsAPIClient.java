@@ -1,6 +1,5 @@
 package org.acme.client;
 
-import org.acme.dto.SpectrumStreamData;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 
 import io.smallrye.mutiny.Multi;
@@ -15,7 +14,7 @@ public interface PhysicsAPIClient {
     @GET
     @Path("/spectrum/stream")
     @Produces(MediaType.SERVER_SENT_EVENTS)
-    Multi<SpectrumStreamData> streamSpectral(@QueryParam("sensor_id") String sensorId);
+    Multi<String> streamSpectral(@QueryParam("sensor_id") String sensorId);
 
     @GET
     @Path("/health")

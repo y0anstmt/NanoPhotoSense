@@ -306,6 +306,43 @@ def fast_infiltration_profile(t: float, tau: float = 60.0, max_delta_n: float = 
     return delta_n
 
 
+def landslide_infiltration_profile(
+    t: float,
+    tau: float = 1200.0,
+    max_delta_n: float = 0.02,
+    pulse_factor: float = 0.3
+) -> float:
+    """
+    Landslide-oriented infiltration profile.
+
+    Models progressive soil saturation (exponential rise) with an additional
+    transient rain pulse that accelerates infiltration around ~3*tau.
+
+    Args:
+        t: Current time (seconds)
+        tau: Characteristic soil saturation time (seconds)
+        max_delta_n: Saturation refractive index change under persistent moisture
+        pulse_factor: Relative pulse intensity during heavy-rain transient
+
+    Returns:
+        Refractive index change at time t
+    """
+    if t <= 0:
+        return 0.0
+
+    # Progressive soil saturation.
+    base = max_delta_n * (1.0 - np.exp(-t / tau))
+
+    # Rain pulse around the inflection zone where slopes are most vulnerable.
+    pulse_center = 3.0 * tau
+    pulse_width = 0.8 * tau
+    pulse_amplitude = max_delta_n * pulse_factor
+    pulse = pulse_amplitude * np.exp(-((t - pulse_center) ** 2) / (2.0 * pulse_width ** 2))
+
+    # Allow moderate overshoot during pulse while keeping physical bounds.
+    return float(np.clip(base + pulse, 0.0, max_delta_n * 1.25))
+
+
 def add_gaussian_noise(
     spectra: np.ndarray,
     sigma_noise: float = 0.01,
@@ -350,10 +387,11 @@ def create_infiltration_profile(
     Factory function to create infiltration profile functions.
     
     Args:
-        profile_type: Type of infiltration profile ("slow" or "fast")
+        profile_type: Type of infiltration profile ("slow", "fast", or "landslide")
         **kwargs: Parameters for the specific profile type
                   - slow: T (duration), max_delta_n
                   - fast: tau (time constant), max_delta_n
+                  - landslide: tau (saturation timescale), max_delta_n, pulse_factor
     
     Returns:
         Callable infiltration profile function that takes time t and returns delta_n
@@ -372,5 +410,13 @@ def create_infiltration_profile(
         max_delta_n = kwargs.get("max_delta_n", 0.01)
         return lambda t: fast_infiltration_profile(t, tau, max_delta_n)
     
+    elif profile_type.lower() == "landslide":
+        tau = kwargs.get("tau", 1200.0)
+        max_delta_n = kwargs.get("max_delta_n", 0.02)
+        pulse_factor = kwargs.get("pulse_factor", 0.3)
+        return lambda t: landslide_infiltration_profile(t, tau, max_delta_n, pulse_factor)
+
     else:
-        raise ValueError(f"Unknown profile type: {profile_type}. Use 'slow' or 'fast'.")
+        raise ValueError(
+            f"Unknown profile type: {profile_type}. Use 'slow', 'fast', or 'landslide'."
+        )

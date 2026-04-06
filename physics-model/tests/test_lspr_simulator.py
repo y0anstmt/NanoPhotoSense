@@ -17,6 +17,7 @@ from lspr_simulator import (
     generate_temporal_series,
     slow_infiltration_profile,
     fast_infiltration_profile,
+    landslide_infiltration_profile,
     add_gaussian_noise,
     create_infiltration_profile
 )
@@ -355,6 +356,29 @@ class TestInfiltrationProfiles:
         # Test at various time points
         assert pytest.approx(profile(0), abs=1e-6) == 0.0
         assert profile(5*tau) > 0.99 * max_delta_n
+
+    def test_landslide_infiltration_profile(self):
+        """Test landslide-oriented infiltration profile"""
+        tau = 600.0
+        max_delta_n = 0.02
+
+        # Starts near zero and grows over time.
+        initial = landslide_infiltration_profile(0, tau=tau, max_delta_n=max_delta_n)
+        mid = landslide_infiltration_profile(2 * tau, tau=tau, max_delta_n=max_delta_n)
+        late = landslide_infiltration_profile(5 * tau, tau=tau, max_delta_n=max_delta_n)
+
+        assert pytest.approx(initial, abs=1e-6) == 0.0
+        assert mid > initial
+        assert late > mid
+        assert late <= max_delta_n * 1.25
+
+    def test_create_infiltration_profile_landslide(self):
+        """Test factory function for landslide profile"""
+        profile = create_infiltration_profile("landslide", tau=800, max_delta_n=0.025)
+
+        assert callable(profile)
+        assert pytest.approx(profile(0), abs=1e-6) == 0.0
+        assert profile(2400) > profile(800)
     
     def test_create_infiltration_profile_defaults(self):
         """Test factory function with default parameters"""

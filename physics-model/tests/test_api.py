@@ -89,3 +89,20 @@ class TestAPI:
 
         response = client.post("/api/spectrum", json=request_data)
         assert response.status_code == 422  # Validation error
+
+    def test_configure_landslide_profile(self):
+        """Test landslide profile configuration"""
+        request_data = {
+            "profile_type": "landslide",
+            "max_delta_n": 0.02,
+            "time_param": 1200.0,
+            "noise_level": 0.03,
+            "base_peak": 520.0,
+            "sensitivity_k": 200.0,
+        }
+
+        response = client.post("/spectrum/configure", json=request_data)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["config"]["profile_type"] == "landslide"
