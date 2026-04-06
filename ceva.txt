@@ -1,0 +1,11 @@
+Rainfall begins
+↓
+Optical sensor detects rising soil moisture
+↓
+Spectral shift indicates saturation front movement
+↓
+Backend detects threshold crossing
+↓
+Risk score increases
+↓
+Alert triggered (Watch → Warning)

@@ -286,6 +286,11 @@ def generate_spectrum_data(
             "fast", tau=config.time_param, max_delta_n=config.max_delta_n
         )
         delta_n = profile_func(elapsed_time)
+    elif config.profile_type == "landslide":
+        profile_func = create_infiltration_profile(
+            "landslide", tau=config.time_param, max_delta_n=config.max_delta_n
+        )
+        delta_n = profile_func(elapsed_time)
     else:
         delta_n = 0.0  # No infiltration
 
@@ -460,10 +465,10 @@ async def configure_infiltration(config: InfiltrationConfig):
     global current_infiltration_config, simulation_start_time
 
     # Validate profile type
-    if config.profile_type not in ["slow", "fast", "none"]:
+    if config.profile_type not in ["slow", "fast", "landslide", "none"]:
         raise HTTPException(
             status_code=400,
-            detail="profile_type must be 'slow', 'fast', or 'none'",
+            detail="profile_type must be 'slow', 'fast', 'landslide', or 'none'",
         )
 
     # Update global configuration
