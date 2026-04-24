@@ -14,6 +14,28 @@ You can run your application in dev mode that enables live coding using:
 
 > **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
 
+## Local dependencies (dev)
+
+The backend depends on:
+
+- **PostgreSQL** (default): `jdbc:postgresql://localhost:5432/nanophotosense` (see `src/main/resources/application.properties`)
+- **Physics Model API** (FastAPI / SSE): `http://localhost:8001`
+
+### Start Physics Model API
+
+From the repository root:
+
+```shell script
+cd ../physics-model/src
+python api.py
+```
+
+The backend connects to it via the MicroProfile REST Client property:
+
+- `quarkus.rest-client.physics-api.url` (default `http://localhost:8001`)
+
+If the physics-model service is not available at startup, SSE streams will retry and then attempt to reconnect periodically (configurable via `spectral.stream.*` properties).
+
 ## Packaging and running the application
 
 The application can be packaged using:

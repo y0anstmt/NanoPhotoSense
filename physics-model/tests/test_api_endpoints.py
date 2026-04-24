@@ -3,13 +3,27 @@ Test script for new FastAPI endpoints
 Tests SSE streaming, batch generation, and configuration
 """
 
-import requests
+import os
+
+import pytest
+
+
+# These are integration-style tests that expect a running server.
+# Enable explicitly:
+#   set PHYSICS_MODEL_RUN_API_TESTS=1
+RUN_API_TESTS = os.getenv("PHYSICS_MODEL_RUN_API_TESTS") == "1"
+BASE_URL = os.getenv("PHYSICS_MODEL_API_URL", "http://localhost:8001")
+
+if not RUN_API_TESTS:
+    pytest.skip(
+        "Integration tests disabled. Set PHYSICS_MODEL_RUN_API_TESTS=1 to run against a live server.",
+        allow_module_level=True,
+    )
+
 import json
 import time
-from sseclient import SSEClient  # pip install sseclient-py
 
-BASE_URL = "http://localhost:8001"
-
+import requests
 
 def test_health():
     """Test health endpoint"""
@@ -94,6 +108,8 @@ def test_stream_spectra(duration_seconds=5):
         url = f"{BASE_URL}/spectrum/stream?sensor_id=LSPR-STREAM"
         
         print(f"Connecting to {url}...")
+        from sseclient import SSEClient  # type: ignore
+
         messages = SSEClient(url)
         
         start_time = time.time()

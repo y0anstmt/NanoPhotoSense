@@ -6,6 +6,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.acme.client.PhysicsAPIClient;
 import org.acme.domain.Alert;
@@ -61,7 +65,29 @@ public class SpectralIngestionService {
     @ConfigProperty(name = "spectral.sensor.ids", defaultValue = "LSPR-01,LSPR-02")
     List<String> sensorIds;
 
+    @ConfigProperty(name = "spectral.stream.retry.at-most", defaultValue = "5")
+    long streamRetryAtMost;
+
+    @ConfigProperty(name = "spectral.stream.retry.min-backoff", defaultValue = "PT2S")
+    Duration streamRetryMinBackoff;
+
+    @ConfigProperty(name = "spectral.stream.retry.max-backoff", defaultValue = "PT1M")
+    Duration streamRetryMaxBackoff;
+
+    @ConfigProperty(name = "spectral.stream.reconnect.enabled", defaultValue = "true")
+    boolean streamReconnectEnabled;
+
+    @ConfigProperty(name = "spectral.stream.reconnect.delay", defaultValue = "PT30S")
+    Duration streamReconnectDelay;
+
     private final Map<String, Cancellable> activeStreams = new ConcurrentHashMap<>();
+    private final Map<String, ScheduledFuture<?>> scheduledReconnects = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "spectral-stream-reconnect");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private volatile boolean stopping = false;
 
     void onStart(@Observes StartupEvent ev) {
         LOG.infof("Initializing SSE streams for %d sensors: %s", sensorIds.size(), sensorIds);
@@ -79,6 +105,7 @@ public class SpectralIngestionService {
     }
     
     void onStop(@Observes ShutdownEvent ev) {
+        stopping = true;
         LOG.infof("Shutting down %d active SSE streams...", activeStreams.size());
         
         activeStreams.keySet().forEach(sensorId -> {
@@ -90,10 +117,20 @@ public class SpectralIngestionService {
         });
         
         LOG.info("All SSE streams stopped");
+
+        scheduledReconnects.values().forEach(future -> {
+            try {
+                future.cancel(false);
+            } catch (Exception ignored) {
+            }
+        });
+        scheduledReconnects.clear();
+        reconnectScheduler.shutdownNow();
     }
 
     public void startStream(String sensorId) {
         LOG.infof("Starting SSE stream for sensor: %s",sensorId);
+        cancelScheduledReconnect(sensorId);
         if(activeStreams.containsKey(sensorId)){
             LOG.warnf("Stream already active for sensor %s, skipping",sensorId);
             return;
@@ -113,8 +150,8 @@ public class SpectralIngestionService {
                     );
             })
             .onFailure().retry()
-                  .withBackOff(Duration.ofSeconds(2),Duration.ofMinutes(1))
-                  .atMost(5)
+                  .withBackOff(streamRetryMinBackoff, streamRetryMaxBackoff)
+                  .atMost(streamRetryAtMost)
             .subscribe().with(
                 savedReading -> {
                     if (savedReading != null) {
@@ -125,15 +162,53 @@ public class SpectralIngestionService {
                 failure -> {
                     LOG.errorf(failure, "⨯ Stream failed permanently for sensor %s after retries", sensorId);
                     activeStreams.remove(sensorId);
+                    scheduleReconnect(sensorId);
                 },
                 
                 () -> {
                     LOG.warnf("⚠ Stream completed unexpectedly for sensor %s", sensorId);
                     activeStreams.remove(sensorId);
+                    scheduleReconnect(sensorId);
                 }
             );
         activeStreams.put(sensorId, cancellable);
         LOG.infof("✓ SSE stream subscription established for sensor: %s", sensorId);       
+    }
+
+    private void scheduleReconnect(String sensorId) {
+        if (stopping || !streamReconnectEnabled) {
+            return;
+        }
+
+        long delayMillis = 0L;
+        try {
+            delayMillis = Math.max(0L, streamReconnectDelay.toMillis());
+        } catch (Exception ignored) {
+        }
+
+        ScheduledFuture<?> existing = scheduledReconnects.get(sensorId);
+        if (existing != null && !existing.isDone() && !existing.isCancelled()) {
+            return;
+        }
+
+        LOG.infof("⟳ Scheduling SSE reconnect for sensor %s in %s", sensorId, streamReconnectDelay);
+        ScheduledFuture<?> future = reconnectScheduler.schedule(() -> {
+            scheduledReconnects.remove(sensorId);
+            if (!stopping) {
+                startStream(sensorId);
+            }
+        }, delayMillis, TimeUnit.MILLISECONDS);
+        scheduledReconnects.put(sensorId, future);
+    }
+
+    private void cancelScheduledReconnect(String sensorId) {
+        ScheduledFuture<?> future = scheduledReconnects.remove(sensorId);
+        if (future != null) {
+            try {
+                future.cancel(false);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private SpectrumStreamData deserializeStreamData(String payload, String sensorId) {
@@ -151,6 +226,7 @@ public class SpectralIngestionService {
     
    
     public void stopStream(String sensorId) {
+        cancelScheduledReconnect(sensorId);
         Cancellable stream = activeStreams.remove(sensorId);
         if (stream != null) {
             stream.cancel();

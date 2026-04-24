@@ -1,0 +1,26 @@
+
+.app-shell {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.app-header,
+.app-footer {
+	padding: 12px 16px;
+}
+
+.app-title {
+	font-weight: 600;
+}
+
+.app-subtitle,
+.app-footer {
+	font-size: 12px;
+	opacity: 0.75;
+}
+
+.app-main {
+	flex: 1;
+	padding: 16px;
+}
