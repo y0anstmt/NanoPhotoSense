@@ -1,0 +1,181 @@
+<div class="dashboard">
+  <div class="toolbar">
+    <button type="button" (click)="refreshAll()" [disabled]="loading">Refresh</button>
+    <span class="muted" *ngIf="loading">Se încarcă…</span>
+    <span class="error" *ngIf="errorMessage">{{ errorMessage }}</span>
+  </div>
+
+  <section class="card">
+    <h2>Streams</h2>
+
+    <div class="muted" *ngIf="!streamsStatus">Nu există status (backend offline?).</div>
+
+    <ng-container *ngIf="streamsStatus as status">
+      <div class="muted">Active: {{ status.activeSensors }}/{{ status.totalSensors }}</div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Senzor</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let sensorId of sensorIds">
+            <td>{{ sensorId }}</td>
+            <td>{{ status.streams[sensorId] ? 'active' : 'inactive' }}</td>
+            <td>
+              <button type="button" (click)="toggleStream(sensorId)">
+                {{ status.streams[sensorId] ? 'Stop' : 'Start' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </ng-container>
+  </section>
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Risk overview</h2>
+
+      <div class="muted" *ngIf="!riskOverview">Nu există date de risc (încă nu sunt citiri?).</div>
+
+      <ng-container *ngIf="riskOverview as overview">
+        <div class="muted">
+          Fereastră: {{ overview.windowMinutes }} min · Senzori: {{ overview.sensorCount }} · High/Critical:
+          {{ overview.highOrCriticalCount }}
+        </div>
+
+        <table class="table" *ngIf="overview.sensors.length">
+          <thead>
+            <tr>
+              <th>Senzor</th>
+              <th>Nivel</th>
+              <th>Ultim risc</th>
+              <th>Trend Δn/h</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of overview.sensors">
+              <td>{{ s.sensorId }}</td>
+              <td>{{ formatRiskLevel(s.riskLevel) }}</td>
+              <td>{{ s.latestRiskScore | number : '1.0-2' }}</td>
+              <td>{{ s.deltaNTrendPerHour | number : '1.0-6' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </ng-container>
+    </section>
+
+    <section class="card">
+      <h2>Alerts (ne-confirmate)</h2>
+
+      <div class="muted" *ngIf="unacknowledgedAlerts.length === 0">Nicio alertă ne-confirmată.</div>
+
+      <ul class="list" *ngIf="unacknowledgedAlerts.length">
+        <li class="list-item" *ngFor="let a of unacknowledgedAlerts">
+          <div class="list-main">
+            <div><strong>{{ a.severity }}</strong> · {{ a.sensorId }}</div>
+            <div class="muted">{{ a.timestamp | date : 'medium' }}</div>
+            <div>{{ a.alertMessage }}</div>
+          </div>
+          <div class="list-actions">
+            <button type="button" (click)="acknowledgeAlert(a.id)">Acknowledge</button>
+          </div>
+        </li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Citiri (senzor selectat)</h2>
+
+    <div class="row">
+      <label for="sensorSelect">Senzor</label>
+      <select
+        id="sensorSelect"
+        [(ngModel)]="selectedSensorId"
+        (ngModelChange)="refreshSelectedSensor()"
+        [disabled]="sensorIds.length === 0"
+      >
+        <option value="" *ngIf="sensorIds.length === 0">(n/a)</option>
+        <option *ngFor="let s of sensorIds" [value]="s">{{ s }}</option>
+      </select>
+    </div>
+
+    <ng-container *ngIf="selectedLatestReading as r; else noReadings">
+      <div class="muted">
+        Ultima citire: {{ r.timestamp | date : 'medium' }} · Δn={{ r.deltaN | number : '1.0-6' }} · risc={{
+          r.riskScore | number : '1.0-2'
+        }}
+      </div>
+
+      <div class="muted" *ngIf="selectedSensorRisk as risk">
+        Nivel: {{ formatRiskLevel(risk.riskLevel) }} · mean risc={{ risk.meanRiskScore | number : '1.0-2' }} ·
+        trend Δn/h={{ risk.deltaNTrendPerHour | number : '1.0-6' }}
+      </div>
+
+      <div class="chart">
+        <svg viewBox="0 0 400 120" preserveAspectRatio="none" aria-label="Intensities chart">
+          <polyline
+            [attr.points]="intensityPolylinePoints(parseIntensities(r))"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+        </svg>
+        <div class="muted">Vizualizare: intensități (din câmpul JSON `intensities`).</div>
+      </div>
+
+      <table class="table" *ngIf="selectedSensorReadings.length">
+        <thead>
+          <tr>
+            <th>Timp</th>
+            <th>Δn</th>
+            <th>Risc</th>
+            <th>λ peak</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let sr of selectedSensorReadings">
+            <td>{{ sr.timestamp | date : 'medium' }}</td>
+            <td>{{ sr.deltaN | number : '1.0-6' }}</td>
+            <td>{{ sr.riskScore | number : '1.0-2' }}</td>
+            <td>{{ sr.peakWavelength | number : '1.0-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </ng-container>
+
+    <ng-template #noReadings>
+      <div class="muted">Nu există încă citiri pentru acest senzor.</div>
+    </ng-template>
+  </section>
+
+  <section class="card">
+    <h2>Ultimele citiri (toți senzorii)</h2>
+
+    <div class="muted" *ngIf="latestReadings.length === 0">Nicio citire încă.</div>
+
+    <table class="table" *ngIf="latestReadings.length">
+      <thead>
+        <tr>
+          <th>Timp</th>
+          <th>Senzor</th>
+          <th>Δn</th>
+          <th>Risc</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let lr of latestReadings">
+          <td>{{ lr.timestamp | date : 'medium' }}</td>
+          <td>{{ lr.sensorId }}</td>
+          <td>{{ lr.deltaN | number : '1.0-6' }}</td>
+          <td>{{ lr.riskScore | number : '1.0-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>
